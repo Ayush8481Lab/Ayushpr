@@ -5,6 +5,10 @@
       "destination": "/api/trending"
     },
     {
+      "source": "/home",
+      "destination": "/api/home"
+    },
+    {
       "source": "/:token",
       "destination": "/api/[token]"
     }
