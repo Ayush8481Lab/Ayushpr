@@ -1,6 +1,10 @@
 {
   "rewrites":[
     {
+      "source": "/trending",
+      "destination": "/api/trending"
+    },
+    {
       "source": "/:token",
       "destination": "/api/[token]"
     }
