@@ -30,7 +30,8 @@ export default async function handler(req, res) {
 
   const fJ = async u => {
     try {
-      const r = await fetch(u, { headers: { "User-Agent": "Mozilla/5.0" } });
+      // 'keep-alive' massively drops latency when making 40+ simultaneous fetch calls
+      const r = await fetch(u, { headers: { "User-Agent": "Mozilla/5.0", "Connection": "keep-alive" } });
       const t = await r.text();
       const m = t.match(/[{[]/);
       return m ? JSON.parse(t.substring(m.index)) : null;
@@ -63,9 +64,17 @@ export default async function handler(req, res) {
       fJ(url('content.getAlbums') + '&n=50&p=1'),
       fJ(url('content.getTrending') + '&entity_type=song&entity_language=' + ln),
       fJ(url('content.getTrending') + '&entity_type=playlist&entity_language=' + ln),
-      fJ(`https://www.jiosaavn.com/api.php?__call=webapi.getFooterDetails&language=${ln}&api_version=4&_format=json&_marker=0`).then(async x => x ? {
-        ar: await rF(x.artist, "artist"), ac: await rF(x.actor, "actor"), al: await rF(x.album, "album"), pl: await rF(x.playlist, "playlist")
-      } : {})
+      // BUGFIX: Execute sub-queries simultaneously using Promise.all inside the `.then`
+      fJ(`https://www.jiosaavn.com/api.php?__call=webapi.getFooterDetails&language=${ln}&api_version=4&_format=json&_marker=0`).then(async x => {
+        if (!x) return {};
+        const [ar, ac, al, pl] = await Promise.all([
+          rF(x.artist, "artist"), 
+          rF(x.actor, "actor"), 
+          rF(x.album, "album"), 
+          rF(x.playlist, "playlist")
+        ]);
+        return { ar, ac, al, pl };
+      })
     ]);
 
     const nR = Array(), nPl = Array();
