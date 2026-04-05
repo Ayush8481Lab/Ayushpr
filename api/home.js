@@ -1,6 +1,12 @@
 export default async function handler(req, res) {
+  // CORS Headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  
+  // CACHING: Cache at Edge/CDN for 20 minutes (1200 seconds). 
+  // stale-while-revalidate allows serving instant responses while refreshing background cache
+  res.setHeader('Cache-Control', 'public, s-maxage=1200, stale-while-revalidate=86400');
+  
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const ln = req.query.ln || 'hindi';
@@ -25,15 +31,18 @@ export default async function handler(req, res) {
     return r;
   };
 
-  const dedup = (a, b) => Array.from(new Map([...(a || Array()), ...(b || Array())].filter(x => x?.id).map(x => [x.id, x])).values());
+  const dedup = (a, b) => Array.from(new Map([...(a || Array()), ...(b || Array())].filter(x => x?.id).map(x =>[x.id, x])).values());
   const shf = a => a.sort(() => Math.random() - 0.5);
+
+  // OPTIMIZATION: Define fetch options & Regex once outside the loop to save CPU cycles
+  const fetchOpts = { headers: { "User-Agent": "Mozilla/5.0", "Connection": "keep-alive" } };
+  const jsonRegex = /[{[]/;
 
   const fJ = async u => {
     try {
-      // 'keep-alive' massively drops latency when making 40+ simultaneous fetch calls
-      const r = await fetch(u, { headers: { "User-Agent": "Mozilla/5.0", "Connection": "keep-alive" } });
+      const r = await fetch(u, fetchOpts);
       const t = await r.text();
-      const m = t.match(/[{[]/);
+      const m = t.match(jsonRegex);
       return m ? JSON.parse(t.substring(m.index)) : null;
     } catch { return null; }
   };
@@ -57,6 +66,7 @@ export default async function handler(req, res) {
   try {
     const url = c => `https://www.jiosaavn.com/api.php?__call=${c}&api_version=4&_format=json&_marker=0&ctx=wap6dot0&languages=${ln}`;
     
+    // Process all parent URLs simultaneously
     const[lD, aD, fD, albD, tS, tP, fDt] = await Promise.all([
       fJ(url('webapi.getLaunchData')),
       fJ(url('social.getTopArtists')),
@@ -64,7 +74,7 @@ export default async function handler(req, res) {
       fJ(url('content.getAlbums') + '&n=50&p=1'),
       fJ(url('content.getTrending') + '&entity_type=song&entity_language=' + ln),
       fJ(url('content.getTrending') + '&entity_type=playlist&entity_language=' + ln),
-      // BUGFIX: Execute sub-queries simultaneously using Promise.all inside the `.then`
+      // Sub-queries processed simultaneously 
       fJ(`https://www.jiosaavn.com/api.php?__call=webapi.getFooterDetails&language=${ln}&api_version=4&_format=json&_marker=0`).then(async x => {
         if (!x) return {};
         const [ar, ac, al, pl] = await Promise.all([
