@@ -100,10 +100,16 @@ export default async function handler(req, res) {
       .map(p => ({ title: dec(p.title), data: (lD[p.k] || Array()).map(i => f(i)) }))
       .filter(p => p.data.length > 0) : Array();
 
+    // EXCLUDE Playlists completely from trending, extract them to a separate array
+    const rawTrending = shf(dedup(lD?.new_trending, tS)).map(i => f(i));
+    const finalTrending = Array(), trendPlaylists = Array();
+    rawTrending.forEach(i => i.type === 'playlist' ? trendPlaylists.push(i) : finalTrending.push(i));
+
     res.status(200).json({
-      trending: shf(dedup(lD?.new_trending, dedup(tS, tP))).map(i => f(i)),
+      trending: finalTrending, // Safely stripped of all playlists
       new_releases: nR,
-      featured_playlists: shf(dedup(dedup(fD?.data, tP).map(i => f(i, "playlist")), nPl)),
+      // Pass the extracted `trendPlaylists` into the deduplication for featured_playlists
+      featured_playlists: shf(dedup(dedup(dedup(fD?.data, tP).map(i => f(i, "playlist")), nPl), trendPlaylists)),
       promo_modules: pM,
       top_charts: (lD?.charts || Array()).map(i => f(i, "playlist", true)),
       top_artists: (aD?.top_artists || Array()).map(i => f(i, "artist", true)),
